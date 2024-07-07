@@ -36,13 +36,47 @@ function SmDeposit() {
         }
     };
 
-    const connectWallet = async () => {
-        try {
-            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-            setAccount(accounts[0]);
-        } catch (error) {
-            console.error('Error connecting wallet', error);
+    const checkNetwork = async (web3Instance) => {
+        const chainId = await web3Instance.eth.getChainId();
+        if (chainId !== 56) { // 56 is the chain ID for Binance Smart Chain Mainnet
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: Web3.utils.toHex(56) }],
+                });
+                window.location.reload();
+            } catch (switchError) {
+                if (switchError.code === 4902) {
+                    alert('Binance Smart Chain is not added to your MetaMask. Please add it manually.');
+                } else {
+                    console.error('Error switching to Binance Smart Chain', switchError);
+                }
+            }
         }
+    };
+
+    const connectWallet = async () => {
+        if (window.ethereum) {
+            const web3Instance = new Web3(window.ethereum);
+            setWeb3(web3Instance);
+            const contractInstance = new web3Instance.eth.Contract(contractABI, contractAddress);
+            setContract(contractInstance);
+            checkNetwork(web3Instance);
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                setAccount(accounts[0]);
+            } catch (error) {
+                console.error('Error connecting wallet', error);
+            }
+        } else {
+            alert('MetaMask is not installed. Please install it to use this app.');
+        }
+    };
+
+    const disconnectWallet = () => {
+        setAccount('');
+        setBalanceBNB('0');
+        setBalanceUSD('0.00');
     };
 
     const handleDeposit = async () => {
@@ -89,12 +123,20 @@ function SmDeposit() {
         }
     };
 
+    const truncateAddress = (address) => {
+        return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+    };
+
     return (
         <div className="App">
             <header className="App-header">
                 <h1>BNB Deposit</h1>
                 {account ? (
                     <div>
+                        <div>
+                            <p>Connected as: {truncateAddress(account)}</p>
+                            <button onClick={disconnectWallet}>Disconnect</button>
+                        </div>
                         <div>
                             <label htmlFor="depositAmount">Deposit Amount (in BNB):</label>
                             <input
